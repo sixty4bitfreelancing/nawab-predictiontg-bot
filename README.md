@@ -1,167 +1,75 @@
-# 🤖 Advanced Telegram Bot - Auto-Join & Live Chat
+# Bot v2 - Production-Grade Modular Telegram Bot
 
-A powerful Telegram bot that automatically approves join requests, sends welcome messages with inline buttons, and provides live chat functionality with admin support.
+## Features
 
-## ✨ Features
+- **Modular structure** - handlers, services, keyboards separated
+- **PostgreSQL** - no JSON file storage
+- **Global error handling** - structured logging, no raw tracebacks to users
+- **Broadcast engine** - RetryAfter, Forbidden, NetworkError handling
+- **Admin error reporting** - CRITICAL errors sent to superadmin
+- **DEBUG mode** - full traceback when `DEBUG=true`
 
-### 🔄 Auto-Join Request Approval
-- Instantly approves join requests to private groups/channels
-- Sends personalized welcome messages to new members
+## Setup
 
-### 🎯 Welcome Message System
-- **Custom welcome image** (set by admin)
-- **Interactive inline buttons:**
-  - 🔑 **Signup** → URL set by admin
-  - 📢 **Join Group** → Telegram group/channel link
-  - 💬 **Live Chat** → Private chat with admin
-  - 📥 **Download Hack** → APK file with teasing captions
-  - 🎁 **Daily Bonuses** → URL set by admin
+### 1. PostgreSQL
 
-### 💬 Live Chat System
-- **Full media support:** text, photo, video, voice, audio, document, sticker, GIF
-- **Admin reply forwarding** from admin group to users
-- **Easy exit button** during live chat
-- **User state management**
+Create database:
 
-### 📡 Broadcast Messaging
-- Send messages to all users (excluding admins)
-- Support for all media types
-- Success/failure tracking
+```sql
+CREATE DATABASE telegram_bot;
+```
 
-### 🔧 Admin Panel
-- **Inline button interface** for easy management
-- **Bot configuration** (welcome image, text, URLs, APK)
-- **User statistics** and logs
-- **Admin group management**
+### 2. Environment
 
-## 🚀 Quick Setup
-
-### 1. Prerequisites
-- Python 3.10 or higher
-- Telegram bot token (get from @BotFather)
-- Admin access to a private group/channel
-
-### 2. Installation
 ```bash
-# Clone the repository
-git clone https://github.com/sixtyfourbitsquad/Ram-TG-BOT-auto-accepter.git
-cd Ram-TG-BOT-auto-accepter
+cp env.example .env
+# Edit .env:
+# - TELEGRAM_BOT_TOKEN
+# - DATABASE_URL (if needed)
+# - SUPERADMIN_ID (optional, for error alerts)
+# - DEBUG=true (optional, for development)
+```
 
-# Install dependencies
+### 3. Install
+
+```bash
 pip install -r requirements.txt
 ```
 
-### 3. Configuration
+### 4. Run
+
 ```bash
-# Set bot token
-export TELEGRAM_BOT_TOKEN="your_bot_token_here"
-
-# Or create .env file
-cp env.example .env
-# Edit .env with your bot token
+python run_bot_v2.py
 ```
 
-### 4. Add Admin Users
-Edit `admins.json` and add your Telegram user ID:
-```json
-[123456789]
-```
+Or:
 
-### 5. Run the Bot
 ```bash
-python bot_advanced.py
+python -m bot.main
 ```
 
-## 📁 File Structure
+## Project Structure
 
 ```
-├── bot_advanced.py          # Main bot code
-├── requirements.txt          # Python dependencies
-├── admins.json              # Admin user IDs
-├── bot_config.json          # Bot configuration
-├── users.json               # User database
-├── broadcast_data.json      # Broadcast system
-├── logs.txt                 # Activity logs
-├── env.example              # Environment template
-└── README.md                # This file
+bot/
+├── main.py           # Entry point, handler registration
+├── config.py         # Configuration (DEBUG, DATABASE_URL, etc.)
+├── database.py       # PostgreSQL pool, init, queries
+├── scheduler.py      # APScheduler (for future scheduled tasks)
+├── handlers/         # Command and update handlers
+├── services/         # Business logic (broadcast, config, user, etc.)
+├── keyboards/        # Inline keyboards
+├── models/           # Data models
+└── utils/            # Logger, exceptions, error handler
 ```
 
-## 🎮 Usage
+## Error Handling
 
-### For Regular Users
-- Join requests are automatically approved
-- Receive welcome message with interactive buttons
-- Use live chat for admin support
-- Download APK files and access bonuses
+- **Global handler** - `application.add_error_handler(global_error_handler)`
+- **Custom exceptions** - DatabaseError, BroadcastError, WelcomeBuilderError, SchedulerError, ValidationError
+- **Broadcast** - One user failure never crashes the loop; RetryAfter waits and retries
+- **Logging** - Structured format: `[timestamp] LEVEL | module | message`
 
-### For Admins
-1. Send `/admin` to the bot
-2. Use inline buttons to configure:
-   - Welcome image and text
-   - Signup and group URLs
-   - Download APK file
-   - Admin group ID
-   - Broadcast messages
+## VPS Deployment
 
-## 🔧 Admin Panel Features
-
-### 📝 Welcome Message Management
-- Set custom welcome text
-- Upload welcome image
-- Configure button URLs
-
-### 📱 Live Chat Management
-- Set admin group for live chat
-- Monitor user interactions
-- Reply to users from admin group
-
-### 📡 Broadcast System
-- Send messages to all users
-- Track delivery success/failure
-- Support all media types
-
-## 🎨 UI Features
-
-- **Teasing text** throughout user experience
-- **Emoji-based** visual design
-- **Full-width buttons** for better UX
-- **Interactive elements** for engagement
-
-## 🔒 Security
-
-- **Admin-only access** to configuration
-- **User state management** for live chat
-- **Error handling** and logging
-- **File validation** and safety checks
-
-## 🚨 Troubleshooting
-
-### Bot not working?
-- Check bot token in environment
-- Verify admin user ID in `admins.json`
-- Check bot permissions in groups
-
-### Live chat not working?
-- Ensure admin group ID is set
-- Check bot is admin in admin group
-- Verify user states are working
-
-### Welcome buttons not working?
-- Check button URLs are configured
-- Verify bot has proper permissions
-- Test with different user accounts
-
-## 🤝 Contributing
-
-Feel free to submit issues and enhancement requests!
-
-## 📄 License
-
-This project is open source and available under the MIT License.
-
----
-
-**Made with ❤️ for Telegram communities**
-
-*Advanced features for modern Telegram bot management*
-
+See [VPS_DEPLOYMENT_V2.md](VPS_DEPLOYMENT_V2.md) for full deployment instructions.
