@@ -1,0 +1,41 @@
+"""Admin panel keyboards."""
+
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+
+
+def admin_panel_keyboard() -> InlineKeyboardMarkup:
+    """Main admin panel keyboard."""
+    keyboard = [
+        [
+            InlineKeyboardButton("📝 Set Welcome Text", callback_data="set_welcome_text"),
+            InlineKeyboardButton("🖼️ Set Welcome Image", callback_data="set_welcome_image"),
+        ],
+        [
+            InlineKeyboardButton("🔗 Set Signup URL", callback_data="set_signup_url"),
+            InlineKeyboardButton("👥 Set Join Group URL", callback_data="set_join_group_url"),
+        ],
+        [
+            InlineKeyboardButton("📱 Set Download APK", callback_data="set_download_apk"),
+            InlineKeyboardButton("🎁 Set Daily Bonuses URL", callback_data="set_daily_bonuses"),
+        ],
+        [
+            InlineKeyboardButton("📱 Set Admin Group", callback_data="set_admin_group"),
+            InlineKeyboardButton("⚙️ Bot Configuration", callback_data="bot_config"),
+        ],
+        [
+            InlineKeyboardButton("📡 Send Message to All Users", callback_data="send_broadcast"),
+            InlineKeyboardButton("👥 View User Stats", callback_data="view_users"),
+        ],
+        [
+            InlineKeyboardButton("📑 View Logs", callback_data="view_logs"),
+            InlineKeyboardButton("🛑 Stop Bot", callback_data="stop_bot"),
+        ],
+    ]
+    return InlineKeyboardMarkup(keyboard)
+
+
+def back_to_admin_keyboard() -> InlineKeyboardMarkup:
+    """Back to admin panel button."""
+    return InlineKeyboardMarkup([
+        [InlineKeyboardButton("🔙 Back to Admin Panel", callback_data="back_to_admin")]
+    ])

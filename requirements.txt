@@ -1,3 +1,5 @@
+# Bot v2 - Production dependencies
 python-telegram-bot==21.0.1
 APScheduler==3.10.4
 python-dotenv==1.0.0
+asyncpg>=0.29.0
