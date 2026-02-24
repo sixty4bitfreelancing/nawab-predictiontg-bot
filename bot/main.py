@@ -26,7 +26,6 @@ from bot.handlers.admin import admin_command, show_chat_id_command
 from bot.handlers.callbacks import handle_callback
 from bot.handlers.messages import handle_message
 from bot.handlers.join import handle_join_request
-from bot.handlers.exit_cmd import exit_live_chat_command
 
 logger = get_logger(__name__)
 
@@ -64,7 +63,6 @@ def build_application() -> Application:
     application.add_handler(CommandHandler("start", start_command))
     application.add_handler(CommandHandler("admin", admin_command))
     application.add_handler(CommandHandler("id", show_chat_id_command))
-    application.add_handler(CommandHandler("exit", exit_live_chat_command))
 
     # Callback handler
     application.add_handler(CallbackQueryHandler(handle_callback))

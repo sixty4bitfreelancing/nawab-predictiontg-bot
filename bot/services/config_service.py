@@ -11,12 +11,8 @@ logger = get_logger(__name__)
 DEFAULT_CONFIG = {
     "welcome_text": "Welcome to our channel! 🎉",
     "welcome_image": "",
-    "signup_url": "",
-    "join_group_url": "",
-    "download_apk": "",
-    "daily_bonuses_url": "",
+    "welcome_buttons": "[]",  # JSON array of {"label": "...", "url": "https://..."} (max 10)
     "admin_group_id": "",
-    "live_chat_enabled": "true",
     "auto_accept_enabled": "true",  # When false, join requests are not auto-approved (other services stay on)
 }
 

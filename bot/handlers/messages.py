@@ -1,24 +1,23 @@
-"""Message handlers - admin config, live chat, admin reply."""
+"""Message handlers - admin config wizard."""
 
-import re
+import json
 from telegram import Update
 from telegram.ext import ContextTypes
 
 from bot.services.config_service import get_config_value, set_config_value
-from bot.services.user_service import is_admin, get_user
-from bot.services.state_service import get_user_state, set_user_state, get_admin_state, set_admin_state
+from bot.services.state_service import get_admin_state, set_admin_state
+from bot.services.user_service import add_admin as add_admin_user, upsert_user
 from bot.services.broadcast_service import broadcast_to_users
+from bot.services.welcome_service import _parse_welcome_buttons
 from bot.utils.maintenance import check_maintenance
 from bot.utils.exceptions import ValidationError
 from bot.utils.logger import get_logger
 
 logger = get_logger(__name__)
 
-USER_HEADER_FORMAT = "👤 User: @{username} ({first_name})\n🆔 ID: {user_id}\n💬 Message:\n\n"
-
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Route messages: admin config, live chat, admin reply."""
+    """Route messages: admin config wizard only."""
     if await check_maintenance(update, context):
         return
     user_id = update.effective_user.id if update.effective_user else 0
@@ -32,21 +31,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         await _handle_admin_response(update, context, admin_state)
         return
 
-    # Live chat (user)
-    user_state = await get_user_state(user_id)
-    if user_state == "live_chat":
-        text = (message.text or "").lower().strip()
-        if text in ("/exit", "/stop", "/quit", "exit", "stop", "quit"):
-            await set_user_state(user_id, None)
-            await message.reply_text("🔙 **Live Chat Ended**\n\nSee you next time! 👋")
-            return
-        await _forward_to_admin_group(update, context, user_id)
-        return
-
-    # Admin reply in admin group
-    admin_group = await get_config_value("admin_group_id")
-    if admin_group and str(message.chat.id) == admin_group and message.reply_to_message:
-        await _handle_admin_reply(update, context)
+    # No other message routing (live chat removed)
 
 
 async def _handle_admin_response(
@@ -57,6 +42,34 @@ async def _handle_admin_response(
     """Process admin config wizard response."""
     message = update.message
     user_id = update.effective_user.id
+
+    if state == "waiting_custom_btn_label":
+        if message.text and message.text.strip():
+            context.user_data["custom_btn_label"] = message.text.strip()
+            await set_admin_state(user_id, "waiting_custom_btn_url")
+            await message.reply_text("✅ Now send the **URL** for this button (https://...).")
+        else:
+            await message.reply_text("❌ Please send the button label (text only).")
+        return
+
+    if state == "waiting_custom_btn_url":
+        label = context.user_data.pop("custom_btn_label", None)
+        if not label:
+            await set_admin_state(user_id, None)
+            await message.reply_text("❌ Session expired. Use Admin Panel → Custom Welcome Buttons → Add again.")
+            return
+        if not message.text or not message.text.strip().startswith(("http://", "https://")):
+            await message.reply_text("❌ Please send a valid URL (https://...).")
+            return
+        url = message.text.strip()
+        current = await get_config_value("welcome_buttons")
+        buttons = _parse_welcome_buttons(current or "[]")
+        buttons.append({"label": label, "url": url})
+        buttons = buttons[:10]
+        await set_config_value("welcome_buttons", json.dumps(buttons))
+        await set_admin_state(user_id, None)
+        await message.reply_text(f"✅ Button added. You have **{len(buttons)}/10** welcome buttons.")
+        return
 
     if state == "waiting_welcome_text":
         if message.text:
@@ -75,38 +88,6 @@ async def _handle_admin_response(
             await message.reply_text("❌ Please send an image.")
             return
 
-    elif state == "waiting_signup_url":
-        if message.text and message.text.startswith(("http://", "https://")):
-            await set_config_value("signup_url", message.text)
-            await message.reply_text("✅ Signup URL updated!")
-        else:
-            await message.reply_text("❌ Please send a valid URL.")
-            return
-
-    elif state == "waiting_join_group_url":
-        if message.text and message.text.startswith(("https://t.me/", "https://telegram.me/")):
-            await set_config_value("join_group_url", message.text)
-            await message.reply_text("✅ Join group URL updated!")
-        else:
-            await message.reply_text("❌ Please send a valid t.me link.")
-            return
-
-    elif state == "waiting_download_apk":
-        if message.document:
-            await set_config_value("download_apk", message.document.file_id)
-            await message.reply_text("✅ Download APK updated!")
-        else:
-            await message.reply_text("❌ Please send an APK file.")
-            return
-
-    elif state == "waiting_daily_bonuses":
-        if message.text and message.text.startswith(("http://", "https://")):
-            await set_config_value("daily_bonuses_url", message.text)
-            await message.reply_text("✅ Daily bonuses URL updated!")
-        else:
-            await message.reply_text("❌ Please send a valid URL.")
-            return
-
     elif state == "waiting_admin_group":
         try:
             gid = int(message.text.strip())
@@ -115,6 +96,31 @@ async def _handle_admin_response(
         except (ValueError, AttributeError):
             await message.reply_text("❌ Please send a valid group ID (numbers only).")
             return
+
+    elif state == "waiting_add_admin_id":
+        target_id = None
+        if message.forward_from:
+            target_id = message.forward_from.id
+            await upsert_user(
+                target_id,
+                username=message.forward_from.username,
+                first_name=message.forward_from.first_name,
+                last_name=message.forward_from.last_name,
+            )
+        elif message.text and message.text.strip().isdigit():
+            target_id = int(message.text.strip())
+        if target_id is None:
+            await message.reply_text(
+                "❌ Send a numeric User ID, or forward a message from the user you want to add as admin."
+            )
+            return
+        try:
+            await add_admin_user(target_id)
+            await message.reply_text(f"✅ User ID {target_id} added as admin.")
+        except Exception as e:
+            await message.reply_text(f"❌ Failed to add admin: {e}")
+        await set_admin_state(user_id, None)
+        return
 
     elif state == "waiting_broadcast":
         await _run_broadcast(update, context)
@@ -144,145 +150,3 @@ async def _run_broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         f"🚫 Blocked: {result.blocked}\n"
         f"📊 Total: {result.total}"
     )
-
-
-async def _forward_to_admin_group(
-    update: Update,
-    context: ContextTypes.DEFAULT_TYPE,
-    user_id: int,
-) -> None:
-    """Forward user message to admin group."""
-    admin_group = await get_config_value("admin_group_id")
-    if not admin_group:
-        await update.message.reply_text("❌ Admin group not configured.")
-        return
-
-    user_info = await get_user(user_id) or {}
-    username = user_info.get("username") or "No username"
-    first_name = user_info.get("first_name") or "Unknown"
-    header = USER_HEADER_FORMAT.format(
-        username=username,
-        first_name=first_name,
-        user_id=user_id,
-    )
-
-    msg = update.message
-    try:
-        if msg.text:
-            await context.bot.send_message(
-                chat_id=int(admin_group),
-                text=header + msg.text,
-            )
-        elif msg.photo:
-            await context.bot.send_photo(
-                chat_id=int(admin_group),
-                photo=msg.photo[-1].file_id,
-                caption=header + (msg.caption or "📸 Image"),
-            )
-        elif msg.video:
-            await context.bot.send_video(
-                chat_id=int(admin_group),
-                video=msg.video.file_id,
-                caption=header + (msg.caption or "🎥 Video"),
-            )
-        elif msg.voice:
-            await context.bot.send_voice(
-                chat_id=int(admin_group),
-                voice=msg.voice.file_id,
-                caption=header + "🎙️ Voice",
-            )
-        elif msg.audio:
-            await context.bot.send_audio(
-                chat_id=int(admin_group),
-                audio=msg.audio.file_id,
-                caption=header + (msg.caption or "🎵 Audio"),
-            )
-        elif msg.document:
-            await context.bot.send_document(
-                chat_id=int(admin_group),
-                document=msg.document.file_id,
-                caption=header + (msg.caption or "📄 Document"),
-            )
-        elif msg.sticker:
-            await context.bot.send_sticker(
-                chat_id=int(admin_group),
-                sticker=msg.sticker.file_id,
-            )
-            await context.bot.send_message(chat_id=int(admin_group), text=header + "🎭 Sticker")
-        elif msg.animation:
-            await context.bot.send_animation(
-                chat_id=int(admin_group),
-                animation=msg.animation.file_id,
-                caption=header + (msg.caption or "🎬 GIF"),
-            )
-        await msg.reply_text("✅ Message sent to admin. You'll receive a reply soon!")
-    except Exception as e:
-        logger.exception("Failed to forward to admin group: %s", e)
-        await msg.reply_text("❌ Failed to send. Please try again later.")
-
-
-async def _handle_admin_reply(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Forward admin reply from admin group to user."""
-    message = update.message
-    reply = message.reply_to_message
-    if not reply:
-        return
-
-    text = reply.text or reply.caption or ""
-    match = re.search(r"🆔 ID: (\d+)", text)
-    if not match:
-        return
-
-    user_id = int(match.group(1))
-    state = await get_user_state(user_id)
-    if state != "live_chat":
-        await message.reply_text("❌ User is no longer in live chat mode.")
-        return
-
-    prefix = "💬 Admin Reply:\n\n"
-    try:
-        if message.text:
-            await context.bot.send_message(chat_id=user_id, text=prefix + message.text)
-        elif message.photo:
-            await context.bot.send_photo(
-                chat_id=user_id,
-                photo=message.photo[-1].file_id,
-                caption=prefix + (message.caption or "📸 Image from admin"),
-            )
-        elif message.video:
-            await context.bot.send_video(
-                chat_id=user_id,
-                video=message.video.file_id,
-                caption=prefix + (message.caption or "🎥 Video from admin"),
-            )
-        elif message.voice:
-            await context.bot.send_voice(
-                chat_id=user_id,
-                voice=message.voice.file_id,
-                caption=prefix + "🎙️ Voice from admin",
-            )
-        elif message.audio:
-            await context.bot.send_audio(
-                chat_id=user_id,
-                audio=message.audio.file_id,
-                caption=prefix + (message.caption or "🎵 Audio from admin"),
-            )
-        elif message.document:
-            await context.bot.send_document(
-                chat_id=user_id,
-                document=message.document.file_id,
-                caption=prefix + (message.caption or "📄 Document from admin"),
-            )
-        elif message.sticker:
-            await context.bot.send_sticker(chat_id=user_id, sticker=message.sticker.file_id)
-            await context.bot.send_message(chat_id=user_id, text=prefix + "🎭 Sticker from admin")
-        elif message.animation:
-            await context.bot.send_animation(
-                chat_id=user_id,
-                animation=message.animation.file_id,
-                caption=prefix + (message.caption or "🎬 GIF from admin"),
-            )
-        await message.reply_text("✅ Reply sent to user!")
-    except Exception as e:
-        logger.exception("Failed to send admin reply to user %s: %s", user_id, e)
-        await message.reply_text(f"❌ Failed to send reply: {e}")

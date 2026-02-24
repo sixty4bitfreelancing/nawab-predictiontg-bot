@@ -524,4 +524,7 @@ After this, add the bot to your channel as in [section 10](#10-add-the-bot-to-yo
 
 ---
 
-**You’re done.** The bot should be running 24/7 and approving join requests (when the toggle is ON) and sending welcome messages. For more deployment options (e.g. Supervisor), see [VPS_DEPLOYMENT_V2.md](VPS_DEPLOYMENT_V2.md).
+**You’re done.** The bot should be running 24/7 and approving join requests (when the toggle is ON) and sending welcome messages.
+
+- **Running more than one bot on this VPS?** See [MULTI_BOT_VPS_SETUP.md](MULTI_BOT_VPS_SETUP.md) (separate folder and database per bot).
+- For other deployment options (e.g. Supervisor), see [VPS_DEPLOYMENT_V2.md](VPS_DEPLOYMENT_V2.md).

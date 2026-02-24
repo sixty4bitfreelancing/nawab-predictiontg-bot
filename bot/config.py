@@ -37,9 +37,30 @@ DATABASE_URL: str = os.getenv(
 LOG_LEVEL: str = os.getenv("LOG_LEVEL", "INFO").upper()
 LOG_FILE: str = str(ROOT_DIR / "logs" / "bot.log")
 
-# Broadcast
-BROADCAST_DELAY_SECONDS: float = 0.05  # Delay between sends to avoid rate limit
-BROADCAST_RETRY_AFTER_FALLBACK_SECONDS: int = 5  # Default wait if RetryAfter missing
+# Broadcast (tune via .env if you hit Telegram rate limits)
+def _float_env(name: str, default: float) -> float:
+    v = os.getenv(name)
+    if v is None:
+        return default
+    try:
+        return float(v)
+    except ValueError:
+        return default
+
+
+def _int_env(name: str, default: int) -> int:
+    v = os.getenv(name)
+    if v is None:
+        return default
+    try:
+        return int(v)
+    except ValueError:
+        return default
+
+
+# 0.04 s = 25 messages per second (under Telegram’s ~30 msg/s limit)
+BROADCAST_DELAY_SECONDS: float = _float_env("BROADCAST_DELAY_SECONDS", 0.04)
+BROADCAST_RETRY_AFTER_FALLBACK_SECONDS: int = _int_env("BROADCAST_RETRY_AFTER_FALLBACK_SECONDS", 5)
 
 # Maintenance mode - server only (set in .env or environment). When True, non-admin users see maintenance message.
 MAINTENANCE: bool = os.getenv("MAINTENANCE", "false").lower() in ("true", "1", "yes")

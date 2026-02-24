@@ -11,12 +11,10 @@ def admin_panel_keyboard() -> InlineKeyboardMarkup:
             InlineKeyboardButton("🖼️ Set Welcome Image", callback_data="set_welcome_image"),
         ],
         [
-            InlineKeyboardButton("🔗 Set Signup URL", callback_data="set_signup_url"),
-            InlineKeyboardButton("👥 Set Join Group URL", callback_data="set_join_group_url"),
+            InlineKeyboardButton("👁 Preview Welcome Message", callback_data="preview_welcome"),
         ],
         [
-            InlineKeyboardButton("📱 Set Download APK", callback_data="set_download_apk"),
-            InlineKeyboardButton("🎁 Set Daily Bonuses URL", callback_data="set_daily_bonuses"),
+            InlineKeyboardButton("🔘 Custom Welcome Buttons (max 10)", callback_data="custom_welcome_buttons"),
         ],
         [
             InlineKeyboardButton("📱 Set Admin Group", callback_data="set_admin_group"),
@@ -25,6 +23,9 @@ def admin_panel_keyboard() -> InlineKeyboardMarkup:
         [
             InlineKeyboardButton("📡 Send Message to All Users", callback_data="send_broadcast"),
             InlineKeyboardButton("👥 View User Stats", callback_data="view_users"),
+        ],
+        [
+            InlineKeyboardButton("👑 Manage Admins", callback_data="manage_admins"),
         ],
         [
             InlineKeyboardButton("🔄 Toggle Auto-Accept Join", callback_data="toggle_auto_accept"),

@@ -2,34 +2,46 @@
 Welcome message service - builds and sends welcome messages.
 """
 
+import json
 from telegram import Bot
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 
-from bot.services.config_service import get_config_value, get_all_config
+from bot.services.config_service import get_all_config
 from bot.utils.exceptions import WelcomeBuilderError
 from bot.utils.logger import get_logger
 
 logger = get_logger(__name__)
 
 
+MAX_WELCOME_BUTTONS = 10
+
+
+def _parse_welcome_buttons(value: str) -> list[dict]:
+    """Parse welcome_buttons JSON. Returns list of {label, url} (max MAX_WELCOME_BUTTONS)."""
+    if not value or not value.strip():
+        return []
+    try:
+        data = json.loads(value)
+        if not isinstance(data, list):
+            return []
+        out = []
+        for item in data[:MAX_WELCOME_BUTTONS]:
+            if isinstance(item, dict) and item.get("label") and item.get("url"):
+                out.append({"label": str(item["label"]), "url": str(item["url"])})
+        return out
+    except (json.JSONDecodeError, TypeError):
+        return []
+
+
 async def build_welcome_keyboard() -> InlineKeyboardMarkup | None:
-    """Build welcome keyboard from config."""
+    """Build welcome keyboard from config (custom buttons only, max 10)."""
     try:
         config = await get_all_config()
+        custom = _parse_welcome_buttons(config.get("welcome_buttons") or "[]")
         keyboard = []
-
-        if config.get("signup_url"):
-            keyboard.append([InlineKeyboardButton("🔑 Signup", url=config["signup_url"])])
-        if config.get("join_group_url"):
-            keyboard.append([InlineKeyboardButton("📢 Join Group", url=config["join_group_url"])])
-        keyboard.append([InlineKeyboardButton("💬 Live Chat", callback_data="live_chat")])
-        if config.get("download_apk"):
-            keyboard.append([InlineKeyboardButton("📥 Download Hack", callback_data="download_hack")])
-        if config.get("daily_bonuses_url"):
-            keyboard.append(
-                [InlineKeyboardButton("🎁 Daily Bonuses", url=config["daily_bonuses_url"])]
-            )
-
+        for btn in custom:
+            if btn.get("url", "").startswith(("http://", "https://")):
+                keyboard.append([InlineKeyboardButton(btn["label"], url=btn["url"])])
         if not keyboard:
             return None
         return InlineKeyboardMarkup(keyboard)

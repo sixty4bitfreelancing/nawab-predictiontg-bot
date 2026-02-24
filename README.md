@@ -94,3 +94,4 @@ bot/
 
 - **[VPS_SETUP_GUIDE.md](VPS_SETUP_GUIDE.md)** – Step-by-step VPS setup (recommended).
 - [VPS_DEPLOYMENT_V2.md](VPS_DEPLOYMENT_V2.md) – Shorter deployment reference.
+- **[MULTI_BOT_VPS_SETUP.md](MULTI_BOT_VPS_SETUP.md)** – Hosting **multiple bots** on one VPS (one folder and one DB per bot).

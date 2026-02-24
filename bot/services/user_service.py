@@ -47,6 +47,40 @@ async def add_admin(user_id: int) -> None:
         raise DatabaseError("Failed to add admin", original=e) from e
 
 
+async def remove_admin(user_id: int) -> bool:
+    """Remove admin. Returns True if removed, False if not found."""
+    try:
+        result = await execute_query(
+            "DELETE FROM admins WHERE user_id = $1",
+            user_id,
+        )
+        return True
+    except DatabaseError:
+        raise
+    except Exception as e:
+        logger.exception("Failed to remove admin %s", user_id)
+        raise DatabaseError("Failed to remove admin", original=e) from e
+
+
+async def get_admins_with_info() -> list[dict]:
+    """Get all admins with user_id, username, first_name (from users table when available)."""
+    try:
+        rows = await fetch_all(
+            """
+            SELECT a.user_id, u.username, u.first_name
+            FROM admins a
+            LEFT JOIN users u ON u.user_id = a.user_id
+            ORDER BY a.user_id
+            """
+        )
+        return [dict(r) for r in rows]
+    except DatabaseError:
+        raise
+    except Exception as e:
+        logger.exception("Failed to get admins with info")
+        raise DatabaseError("Failed to get admins", original=e) from e
+
+
 async def upsert_user(
     user_id: int,
     username: str | None = None,
