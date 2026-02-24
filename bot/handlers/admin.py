@@ -58,7 +58,6 @@ async def show_chat_id_command(update: Update, context: ContextTypes.DEFAULT_TYP
     await update.message.reply_text(
         f"📋 **Chat Information**\n\n"
         f"**Type:** {chat_type}\n**Title:** {chat.title}\n**ID:** `{chat.id}`\n"
-        f"{username_info}\n\n"
-        f"To set as admin group: Copy the ID and use Admin Panel → Set Admin Group",
+        f"{username_info}",
         parse_mode="Markdown",
     )

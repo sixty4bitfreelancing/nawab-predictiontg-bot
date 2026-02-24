@@ -88,15 +88,6 @@ async def _handle_admin_response(
             await message.reply_text("❌ Please send an image.")
             return
 
-    elif state == "waiting_admin_group":
-        try:
-            gid = int(message.text.strip())
-            await set_config_value("admin_group_id", str(gid))
-            await message.reply_text(f"✅ Admin group ID updated to: {gid}")
-        except (ValueError, AttributeError):
-            await message.reply_text("❌ Please send a valid group ID (numbers only).")
-            return
-
     elif state == "waiting_add_admin_id":
         target_id = None
         if message.forward_from:

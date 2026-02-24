@@ -17,7 +17,6 @@ def admin_panel_keyboard() -> InlineKeyboardMarkup:
             InlineKeyboardButton("🔘 Custom Welcome Buttons (max 10)", callback_data="custom_welcome_buttons"),
         ],
         [
-            InlineKeyboardButton("📱 Set Admin Group", callback_data="set_admin_group"),
             InlineKeyboardButton("⚙️ Bot Configuration", callback_data="bot_config"),
         ],
         [

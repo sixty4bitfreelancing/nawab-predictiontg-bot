@@ -12,7 +12,6 @@ DEFAULT_CONFIG = {
     "welcome_text": "Welcome to our channel! 🎉",
     "welcome_image": "",
     "welcome_buttons": "[]",  # JSON array of {"label": "...", "url": "https://..."} (max 10)
-    "admin_group_id": "",
     "auto_accept_enabled": "true",  # When false, join requests are not auto-approved (other services stay on)
 }
 

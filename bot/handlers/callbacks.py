@@ -69,11 +69,6 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
             "🔘 **Add Button**\n\nSend the **button label** (text shown on the button).",
             reply_markup=back_to_admin_keyboard(),
         )
-    elif data == "set_admin_group":
-        await set_admin_state(user_id, "waiting_admin_group")
-        await query.edit_message_text(
-            "📱 **Set Admin Group**\n\nSend the group ID. Use /id in the group to get it."
-        )
     elif data == "bot_config":
         await _show_bot_config(query)
     elif data == "toggle_auto_accept":
@@ -190,7 +185,6 @@ async def _show_bot_config(query) -> None:
         f"📝 **Welcome Text:** {txt}\n"
         f"🖼️ **Welcome Image:** {'✅ Set' if config.get('welcome_image') else '❌ Not Set'}\n"
         f"🔘 **Welcome Buttons:** {len(_parse_welcome_buttons(config.get('welcome_buttons') or '[]'))}/10\n"
-        f"📱 **Admin Group ID:** {config.get('admin_group_id') or '❌ Not Set'}\n"
         f"🔄 **Auto-Accept Join:** {'✅ ON' if auto_accept else '❌ OFF'}"
     )
     await query.edit_message_text(cfg_text, reply_markup=back_to_admin_keyboard())
