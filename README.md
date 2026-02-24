@@ -70,6 +70,21 @@ bot/
 - **Broadcast** - One user failure never crashes the loop; RetryAfter waits and retries
 - **Logging** - Structured format: `[timestamp] LEVEL | module | message`
 
+## Admins: Superadmin vs normal admin
+
+- **Superadmin** – The Telegram user whose ID is set as `SUPERADMIN_ID` in `.env`. That person:
+  - Is added to the `admins` table on bot startup (so they can use `/admin`).
+  - Receives **CRITICAL error alerts** in Telegram (short summary, no full traceback).
+  - Get the ID from [@userinfobot](https://t.me/userinfobot) and put it in `.env`.
+
+- **Normal admin** – Any user whose Telegram user ID is in the `admins` table. They can use `/admin`, configure the bot, broadcast, etc. They do **not** receive CRITICAL error alerts (only the superadmin does).
+
+- **How to add more admins** – There is no in-bot “add admin” button. Add them in the database (run on the server, in the same DB as the bot):
+  ```sql
+  INSERT INTO admins (user_id) VALUES (123456789) ON CONFLICT (user_id) DO NOTHING;
+  ```
+  Replace `123456789` with the new admin’s Telegram user ID (from @userinfobot).
+
 ## Features (optional)
 
 - **Auto-accept toggle** – In Admin Panel use "🔄 Toggle Auto-Accept Join". When OFF, the bot does not approve channel/group join requests; all other services (/start welcome, live chat, broadcast) keep running.

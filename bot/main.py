@@ -5,6 +5,7 @@ Entry point. Registers global error handler and all handlers.
 
 import sys
 
+from telegram import Update
 from telegram.ext import (
     Application,
     ApplicationBuilder,
@@ -97,7 +98,7 @@ def main() -> None:
     application = build_application()
     logger.info("Starting Bot v2...")
     application.run_polling(
-        allowed_updates=Application.ALL_UPDATES,
+        allowed_updates=Update.ALL_TYPES,
         drop_pending_updates=True,
     )
 

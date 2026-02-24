@@ -194,11 +194,26 @@ postgresql://telegram_bot:your_secure_password@localhost:5432/telegram_bot
 
 ### Install Python and Git
 
+The bot needs **Python 3.10 or newer**. Ubuntu 22.04/24.04 include a suitable version.
+
 ```bash
 sudo apt install -y python3 python3-pip python3-venv git
+python3 --version
 ```
 
+If the version is below 3.10, you may need to add the deadsnakes PPA or use a newer OS image.
+
 ### Go to your home directory and clone the repo
+
+Use **one** of these (the folder name will match the repo name):
+
+```bash
+cd ~
+git clone https://github.com/sixty4bitfreelancing/nawab-predictiontg-bot.git
+cd nawab-predictiontg-bot
+```
+
+Or:
 
 ```bash
 cd ~
@@ -206,7 +221,7 @@ git clone https://github.com/sixtyfourbitsquad/new-tg-auto-join-bot-feb-22-26.gi
 cd new-tg-auto-join-bot-feb-22-26
 ```
 
-You should see folders like `bot/` and files like `run_bot_v2.py`, `requirements.txt`.
+You should see folders like `bot/` and files like `run_bot_v2.py`, `requirements.txt`. In the rest of this guide we use `nawab-predictiontg-bot` as the folder name—replace it with your actual folder name if you cloned the other repo.
 
 ### Create a virtual environment and install dependencies
 
@@ -303,12 +318,17 @@ So the bot keeps running after you disconnect and restarts if it crashes.
 
 ### Find your username and project path
 
+From inside the project folder, run:
+
 ```bash
 whoami
 pwd
 ```
 
-Example: user `root`, path `/root/new-tg-auto-join-bot-feb-22-26`. Use **your** values in the next step.
+Example: user `root`, path `/root/nawab-predictiontg-bot`. Use **your** values in the next step.
+
+- **root user:** home is `/root/` (e.g. `/root/nawab-predictiontg-bot`).
+- **Other users:** home is `/home/USERNAME/` (e.g. `/home/ubuntu/nawab-predictiontg-bot`).
 
 ### Create the systemd service file
 
@@ -316,7 +336,9 @@ Example: user `root`, path `/root/new-tg-auto-join-bot-feb-22-26`. Use **your** 
 sudo nano /etc/systemd/system/telegram-bot-v2.service
 ```
 
-Paste the following and replace **YOUR_USERNAME** and paths with your actual username and path (e.g. `root` and `/root/new-tg-auto-join-bot-feb-22-26`):
+Paste the following and replace **YOUR_USERNAME** and **PROJECT_FOLDER** with your actual values (e.g. `root` and `nawab-predictiontg-bot`).
+
+**If you use `root`** (paths use `/root/`):
 
 ```ini
 [Unit]
@@ -325,10 +347,10 @@ After=network.target postgresql.service
 
 [Service]
 Type=simple
-User=YOUR_USERNAME
-WorkingDirectory=/home/YOUR_USERNAME/new-tg-auto-join-bot-feb-22-26
-Environment=PATH=/home/YOUR_USERNAME/new-tg-auto-join-bot-feb-22-26/venv/bin
-ExecStart=/home/YOUR_USERNAME/new-tg-auto-join-bot-feb-22-26/venv/bin/python run_bot_v2.py
+User=root
+WorkingDirectory=/root/PROJECT_FOLDER
+Environment=PATH=/root/PROJECT_FOLDER/venv/bin
+ExecStart=/root/PROJECT_FOLDER/venv/bin/python run_bot_v2.py
 Restart=always
 RestartSec=10
 
@@ -336,13 +358,29 @@ RestartSec=10
 WantedBy=multi-user.target
 ```
 
-If your user is `root`, use `/root/` instead of `/home/root/`:
+**If you use a normal user** (e.g. `ubuntu`; paths use `/home/username/`):
 
-- `WorkingDirectory=/root/new-tg-auto-join-bot-feb-22-26`
-- `Environment=PATH=/root/new-tg-auto-join-bot-feb-22-26/venv/bin`
-- `ExecStart=/root/new-tg-auto-join-bot-feb-22-26/venv/bin/python run_bot_v2.py`
+```ini
+[Unit]
+Description=Telegram Bot v2
+After=network.target postgresql.service
 
-Save: `Ctrl+O`, Enter, then `Ctrl+X`.
+[Service]
+Type=simple
+User=ubuntu
+WorkingDirectory=/home/ubuntu/PROJECT_FOLDER
+Environment=PATH=/home/ubuntu/PROJECT_FOLDER/venv/bin
+ExecStart=/home/ubuntu/PROJECT_FOLDER/venv/bin/python run_bot_v2.py
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
+```
+
+Replace `PROJECT_FOLDER` with the actual folder name (e.g. `nawab-predictiontg-bot` or `new-tg-auto-join-bot-feb-22-26`).
+
+Save in nano: `Ctrl+O`, Enter, then `Ctrl+X`.
 
 ### Enable and start the service
 
@@ -408,22 +446,24 @@ Logs are also written to `logs/bot.log` inside the project folder.
 | Problem | What to do |
 |--------|------------|
 | **Database connection failed** | 1. Check PostgreSQL: `sudo systemctl status postgresql`<br>2. Check `.env`: `DATABASE_URL` and password match what you set in PostgreSQL. |
+| **`Name or service not known`** (database) | The **host** in `DATABASE_URL` cannot be resolved. If PostgreSQL is on the **same server**, use `localhost`: `postgresql://user:pass@localhost:5432/telegram_bot`. If using a **remote** DB, fix the hostname or IP in the URL. |
 | **TELEGRAM_BOT_TOKEN not set** | 1. Make sure `.env` exists in the project folder.<br>2. Open `.env` and confirm the token line has no spaces: `TELEGRAM_BOT_TOKEN=7123...` |
 | **Access denied for /admin** | Set `SUPERADMIN_ID` in `.env` to your Telegram user ID (from @userinfobot), then restart: `sudo systemctl restart telegram-bot-v2`. |
 | **Permission denied** when starting | The `User=` in the service file must be the same user who owns the project folder. Fix paths and `User=`, then run `sudo systemctl daemon-reload` and `sudo systemctl restart telegram-bot-v2`. |
-| **Bot doesn’t approve join requests** | 1. In the bot, use Admin Panel → “🔄 Toggle Auto-Accept Join” and ensure it’s ON.<br>2. In the channel/group, make the bot admin with “Approve join requests” (or equivalent) permission. |
+| **Bot doesn’t approve join requests** | 1. In the bot, send `/admin` → “🔄 Toggle Auto-Accept Join” and ensure it’s **ON**.<br>2. In the channel/group, make the bot **administrator** with **“Approve join requests”** (or “Invite users via link”) permission. |
+| **“Bot is under maintenance” for everyone** | You have `MAINTENANCE=true` in `.env`. Set `MAINTENANCE=false` and restart: `sudo systemctl restart telegram-bot-v2`. |
 
 ### Updating the bot after code changes
 
 ```bash
-cd ~/new-tg-auto-join-bot-feb-22-26
+cd ~/nawab-predictiontg-bot
 git pull
 source venv/bin/activate
 pip install -r requirements.txt
 sudo systemctl restart telegram-bot-v2
 ```
 
-(Adjust the path if you used a different folder or user.)
+(Replace `nawab-predictiontg-bot` with your actual project folder name.)
 
 ### Maintenance mode (server-only)
 
@@ -447,7 +487,7 @@ This allows SSH (22) and blocks other ports by default. The bot only talks out t
 
 ## Quick reference: full setup from a clean Ubuntu VPS
 
-If you already have the bot token and user ID, you can run these in order (replace placeholders):
+If you already have the bot token and user ID, you can run these in order (replace `YOUR_DB_PASSWORD` and edit `.env` before testing):
 
 ```bash
 # Update system
@@ -459,14 +499,14 @@ sudo systemctl start postgresql && sudo systemctl enable postgresql
 sudo -u postgres psql -c "CREATE USER telegram_bot WITH PASSWORD 'YOUR_DB_PASSWORD';"
 sudo -u postgres psql -c "CREATE DATABASE telegram_bot OWNER telegram_bot;"
 
-# Python and bot
+# Python and bot (clone; folder will be nawab-predictiontg-bot)
 sudo apt install -y python3 python3-pip python3-venv git
-cd ~ && git clone https://github.com/sixtyfourbitsquad/new-tg-auto-join-bot-feb-22-26.git
-cd new-tg-auto-join-bot-feb-22-26
+cd ~ && git clone https://github.com/sixty4bitfreelancing/nawab-predictiontg-bot.git
+cd nawab-predictiontg-bot
 python3 -m venv venv && source venv/bin/activate
 pip install -r requirements.txt
 
-# Configure (then edit .env with your token, DATABASE_URL, SUPERADMIN_ID)
+# Configure (edit .env with TELEGRAM_BOT_TOKEN, DATABASE_URL, SUPERADMIN_ID)
 cp env.example .env && chmod 600 .env
 nano .env
 
@@ -474,9 +514,8 @@ nano .env
 python run_bot_v2.py
 # Ctrl+C after you see "Starting Bot v2..."
 
-# Service (replace YOUR_USER and path if different)
-sudo nano /etc/systemd/system/telegram-bot-v2.service
-# Paste the [Unit]/[Service]/[Install] block and fix User= and paths
+# Service: create /etc/systemd/system/telegram-bot-v2.service
+# Use the [Unit]/[Service]/[Install] block from section 9; set User= and paths for your user and folder
 sudo systemctl daemon-reload && sudo systemctl enable telegram-bot-v2 && sudo systemctl start telegram-bot-v2
 sudo systemctl status telegram-bot-v2
 ```

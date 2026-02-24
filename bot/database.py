@@ -30,7 +30,10 @@ async def get_pool() -> Pool:
             logger.info("Database pool created")
         except Exception as e:
             logger.exception("Failed to create database pool")
-            raise DatabaseError("Failed to connect to database", original=e) from e
+            msg = "Failed to connect to database"
+            if isinstance(e, OSError) and "Name or service not known" in str(e):
+                msg += ". Check DATABASE_URL in .env: use localhost if PostgreSQL is on this server, or a valid hostname for remote DB."
+            raise DatabaseError(msg, original=e) from e
     return _pool
 
 
