@@ -6,9 +6,9 @@ from telegram.ext import ContextTypes
 
 from bot.services.config_service import get_config_value, set_config_value
 from bot.services.state_service import get_admin_state, set_admin_state
-from bot.services.user_service import add_admin as add_admin_user, upsert_user
+from bot.services.user_service import add_admin as add_admin_user, upsert_user, is_admin
 from bot.services.broadcast_service import broadcast_to_users
-from bot.services.welcome_service import _parse_welcome_buttons
+from bot.services.welcome_service import send_welcome, _parse_welcome_buttons
 from bot.utils.maintenance import check_maintenance
 from bot.utils.exceptions import ValidationError
 from bot.utils.logger import get_logger
@@ -31,7 +31,12 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         await _handle_admin_response(update, context, admin_state)
         return
 
-    # No other message routing (live chat removed)
+    # Any other message from a non-admin: reply with welcome (text + image + buttons)
+    if not await is_admin(user_id):
+        try:
+            await send_welcome(context.bot, user_id)
+        except Exception as e:
+            logger.exception("Failed to send welcome on message to %s: %s", user_id, e)
 
 
 async def _handle_admin_response(
@@ -138,6 +143,6 @@ async def _run_broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         f"📡 **Broadcast Complete**\n\n"
         f"✅ Delivered: {result.delivered}\n"
         f"❌ Failed: {result.failed}\n"
-        f"🚫 Blocked: {result.blocked}\n"
+        f"⚠️ Couldn't deliver: {result.blocked} (user blocked bot or never started chat)\n"
         f"📊 Total: {result.total}"
     )
