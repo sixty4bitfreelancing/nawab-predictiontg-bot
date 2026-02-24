@@ -6,7 +6,7 @@ from telegram.ext import ContextTypes
 
 from bot.services.config_service import get_config_value, set_config_value
 from bot.services.state_service import get_admin_state, set_admin_state
-from bot.services.user_service import add_admin as add_admin_user, upsert_user, is_admin
+from bot.services.user_service import is_admin
 from bot.services.broadcast_service import broadcast_to_users
 from bot.services.welcome_service import send_welcome, _parse_welcome_buttons
 from bot.utils.maintenance import check_maintenance
@@ -92,31 +92,6 @@ async def _handle_admin_response(
         else:
             await message.reply_text("❌ Please send an image.")
             return
-
-    elif state == "waiting_add_admin_id":
-        target_id = None
-        if message.forward_from:
-            target_id = message.forward_from.id
-            await upsert_user(
-                target_id,
-                username=message.forward_from.username,
-                first_name=message.forward_from.first_name,
-                last_name=message.forward_from.last_name,
-            )
-        elif message.text and message.text.strip().isdigit():
-            target_id = int(message.text.strip())
-        if target_id is None:
-            await message.reply_text(
-                "❌ Send a numeric User ID, or forward a message from the user you want to add as admin."
-            )
-            return
-        try:
-            await add_admin_user(target_id)
-            await message.reply_text(f"✅ User ID {target_id} added as admin.")
-        except Exception as e:
-            await message.reply_text(f"❌ Failed to add admin: {e}")
-        await set_admin_state(user_id, None)
-        return
 
     elif state == "waiting_broadcast":
         await _run_broadcast(update, context)

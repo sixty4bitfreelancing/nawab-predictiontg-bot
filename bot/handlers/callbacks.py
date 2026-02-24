@@ -4,18 +4,9 @@ import json
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes
 
-from bot.config import SUPERADMIN_ID
 from bot.keyboards.admin import admin_panel_keyboard, back_to_admin_keyboard
 from bot.services.config_service import get_config_value, get_all_config, set_config_value
-from bot.services.user_service import (
-    is_admin,
-    get_all_admin_ids,
-    get_user_count,
-    get_recent_users,
-    get_admins_with_info,
-    add_admin as add_admin_user,
-    remove_admin as remove_admin_user,
-)
+from bot.services.user_service import is_admin, get_user_count, get_recent_users
 from bot.services.state_service import get_admin_state, set_admin_state
 from bot.services.log_service import get_recent_logs
 from bot.services.broadcast_service import broadcast_to_users, BroadcastResult
@@ -46,9 +37,6 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         await query.edit_message_text("❌ Access denied. You are not authorized as an admin.")
         return
 
-    if data == "noop_superadmin":
-        await query.answer("Superadmin cannot be removed.", show_alert=True)
-        return
     if data == "set_welcome_text":
         await set_admin_state(user_id, "waiting_welcome_text")
         await query.edit_message_text(
@@ -81,18 +69,6 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         )
     elif data == "view_users":
         await _show_user_stats(query)
-    elif data == "manage_admins":
-        await _show_manage_admins(query, context)
-    elif data == "add_admin_prompt":
-        await set_admin_state(user_id, "waiting_add_admin_id")
-        await query.edit_message_text(
-            "👑 **Add Admin**\n\n"
-            "Send the Telegram **User ID** (numbers only), or **forward a message** from the user you want to add.\n\n"
-            "To get a user's ID: they can send /start to the bot, or use @userinfobot.",
-            reply_markup=back_to_admin_keyboard(),
-        )
-    elif data.startswith("remove_admin_"):
-        await _handle_remove_admin(query, context, data)
     elif data == "view_logs":
         await _show_logs(query)
     elif data == "stop_bot":
@@ -204,57 +180,9 @@ async def _toggle_auto_accept(query) -> None:
     )
 
 
-async def _show_manage_admins(query, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Show list of admins with Add / Remove options."""
-    admins = await get_admins_with_info()
-    lines = []
-    keyboard = []
-    for a in admins:
-        uid = a["user_id"]
-        label = a.get("username") or a.get("first_name") or str(uid)
-        display = f"@{label}" if a.get("username") else f"{label} (ID: {uid})"
-        lines.append(f"• {display} — `{uid}`" + (" 👑" if SUPERADMIN_ID and uid == SUPERADMIN_ID else ""))
-        if SUPERADMIN_ID and uid == SUPERADMIN_ID:
-            keyboard.append([InlineKeyboardButton(f"🔒 {display} (Superadmin)", callback_data="noop_superadmin")])
-        else:
-            keyboard.append([InlineKeyboardButton(f"❌ Remove {display}", callback_data=f"remove_admin_{uid}")])
-    keyboard.append([InlineKeyboardButton("➕ Add Admin", callback_data="add_admin_prompt")])
-    keyboard.append([InlineKeyboardButton("🔙 Back to Admin Panel", callback_data="back_to_admin")])
-    text = (
-        "👑 **Manage Admins**\n\n"
-        "**Current admins:**\n" + ("\n".join(lines) if lines else "None yet.") + "\n\n"
-        "• **Add:** use the button below, then send a User ID or forward a message from that user.\n"
-        "• **Remove:** use the ❌ button (Superadmin cannot be removed)."
-    )
-    await query.edit_message_text(
-        text,
-        reply_markup=InlineKeyboardMarkup(keyboard),
-    )
-
-
-async def _handle_remove_admin(query, context: ContextTypes.DEFAULT_TYPE, data: str) -> None:
-    """Remove an admin (unless they are superadmin)."""
-    try:
-        uid = int(data.replace("remove_admin_", ""))
-    except ValueError:
-        await query.answer("Invalid data.", show_alert=True)
-        return
-    if SUPERADMIN_ID and uid == SUPERADMIN_ID:
-        await query.answer("Cannot remove Superadmin.", show_alert=True)
-        return
-    try:
-        await remove_admin_user(uid)
-        await query.answer("✅ Admin removed.")
-        await _show_manage_admins(query, context)
-    except Exception as e:
-        logger.exception("Remove admin failed: %s", e)
-        await query.answer("Failed to remove admin.", show_alert=True)
-
-
 async def _show_user_stats(query) -> None:
     total = await get_user_count()
     recent = await get_recent_users(5)
-    admins = await get_all_admin_ids()
     lines = []
     for u in recent:
         un = f"@{u['username']}" if u.get("username") else "No username"
