@@ -1,4 +1,4 @@
-# Bot v2 - Production-Grade Modular Telegram Bot
+    # Bot v2 - Production-Grade Modular Telegram Bot
 
 ## Features
 
@@ -70,6 +70,12 @@ bot/
 - **Broadcast** - One user failure never crashes the loop; RetryAfter waits and retries
 - **Logging** - Structured format: `[timestamp] LEVEL | module | message`
 
+## Features (optional)
+
+- **Auto-accept toggle** – In Admin Panel use "🔄 Toggle Auto-Accept Join". When OFF, the bot does not approve channel/group join requests; all other services (/start welcome, live chat, broadcast) keep running.
+- **Maintenance mode** – Set `MAINTENANCE=true` in `.env` (server only). Non-admin users see a maintenance message; admins can use the bot. Change only by editing `.env` and restarting.
+
 ## VPS Deployment
 
-See [VPS_DEPLOYMENT_V2.md](VPS_DEPLOYMENT_V2.md) for full deployment instructions.
+- **[VPS_SETUP_GUIDE.md](VPS_SETUP_GUIDE.md)** – Step-by-step VPS setup (recommended).
+- [VPS_DEPLOYMENT_V2.md](VPS_DEPLOYMENT_V2.md) – Shorter deployment reference.

@@ -17,6 +17,7 @@ DEFAULT_CONFIG = {
     "daily_bonuses_url": "",
     "admin_group_id": "",
     "live_chat_enabled": "true",
+    "auto_accept_enabled": "true",  # When false, join requests are not auto-approved (other services stay on)
 }
 
 

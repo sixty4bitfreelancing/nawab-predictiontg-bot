@@ -27,6 +27,9 @@ def admin_panel_keyboard() -> InlineKeyboardMarkup:
             InlineKeyboardButton("👥 View User Stats", callback_data="view_users"),
         ],
         [
+            InlineKeyboardButton("🔄 Toggle Auto-Accept Join", callback_data="toggle_auto_accept"),
+        ],
+        [
             InlineKeyboardButton("📑 View Logs", callback_data="view_logs"),
             InlineKeyboardButton("🛑 Stop Bot", callback_data="stop_bot"),
         ],

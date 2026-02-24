@@ -12,6 +12,7 @@ from bot.services.state_service import get_user_state, set_user_state, get_admin
 from bot.services.log_service import get_recent_logs
 from bot.services.broadcast_service import broadcast_to_users, BroadcastResult
 from bot.services.welcome_service import send_welcome
+from bot.utils.maintenance import check_maintenance
 from bot.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -22,10 +23,14 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     query = update.callback_query
     if not query:
         return
-    await query.answer()
-
     data = query.data
     user_id = query.from_user.id if query.from_user else 0
+
+    # Maintenance: block non-admins before answering callback (user-facing buttons only)
+    is_admin_user = await is_admin(user_id)
+    if not is_admin_user and await check_maintenance(update, context):
+        return
+    await query.answer()
 
     # User buttons (work for everyone)
     if data == "signup":
@@ -81,6 +86,8 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         )
     elif data == "bot_config":
         await _show_bot_config(query)
+    elif data == "toggle_auto_accept":
+        await _toggle_auto_accept(query)
     elif data == "send_broadcast":
         await set_admin_state(user_id, "waiting_broadcast")
         await query.edit_message_text(
@@ -177,6 +184,7 @@ async def _show_bot_config(query) -> None:
     config = await get_all_config()
     text = config.get("welcome_text", "")[:50]
     txt = f"{text}..." if len(config.get("welcome_text", "")) > 50 else text
+    auto_accept = config.get("auto_accept_enabled", "true").lower() in ("true", "1", "yes")
     cfg_text = (
         f"🔧 **Bot Configuration**\n\n"
         f"📝 **Welcome Text:** {txt}\n"
@@ -186,9 +194,24 @@ async def _show_bot_config(query) -> None:
         f"📱 **Download APK:** {'✅ Set' if config.get('download_apk') else '❌ Not Set'}\n"
         f"🎁 **Daily Bonuses URL:** {config.get('daily_bonuses_url') or '❌ Not Set'}\n"
         f"📱 **Admin Group ID:** {config.get('admin_group_id') or '❌ Not Set'}\n"
-        f"💬 **Live Chat:** {'✅ Enabled' if config.get('live_chat_enabled', 'true') == 'true' else '❌ Disabled'}"
+        f"💬 **Live Chat:** {'✅ Enabled' if config.get('live_chat_enabled', 'true') == 'true' else '❌ Disabled'}\n"
+        f"🔄 **Auto-Accept Join:** {'✅ ON' if auto_accept else '❌ OFF'}"
     )
     await query.edit_message_text(cfg_text, reply_markup=back_to_admin_keyboard())
+
+
+async def _toggle_auto_accept(query) -> None:
+    """Toggle auto-accept join requests on/off. Other services (welcome, broadcast, etc.) stay on."""
+    current = await get_config_value("auto_accept_enabled")
+    new_value = "false" if current.lower() in ("true", "1", "yes") else "true"
+    await set_config_value("auto_accept_enabled", new_value)
+    status = "ON" if new_value == "true" else "OFF"
+    await query.edit_message_text(
+        f"🔄 **Auto-Accept Join** is now **{status}**\n\n"
+        f"When OFF, the bot will not approve channel/group join requests. "
+        f"All other services (/start welcome, live chat, broadcast) keep running.",
+        reply_markup=back_to_admin_keyboard(),
+    )
 
 
 async def _show_user_stats(query) -> None:

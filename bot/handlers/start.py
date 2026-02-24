@@ -5,6 +5,7 @@ from telegram.ext import ContextTypes
 
 from bot.services.user_service import is_admin, upsert_user
 from bot.services.welcome_service import send_welcome
+from bot.utils.maintenance import check_maintenance
 from bot.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -12,6 +13,8 @@ logger = get_logger(__name__)
 
 async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Handle /start command."""
+    if await check_maintenance(update, context):
+        return
     user = update.effective_user
     if not user:
         return

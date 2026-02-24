@@ -192,6 +192,16 @@ chmod 600 .env
 
 Set `SUPERADMIN_ID` in `.env` to your Telegram user ID. Get it by messaging [@userinfobot](https://t.me/userinfobot).
 
+### Maintenance Mode (server-only)
+
+To show a "Bot is under maintenance" message to non-admin users, set in `.env`:
+
+```env
+MAINTENANCE=true
+```
+
+Then restart the bot. Only change this on the server (edit `.env`); admins can still use the bot. Set `MAINTENANCE=false` and restart when done.
+
 ---
 
 ## 🔄 Updating the Bot

@@ -1,8 +1,10 @@
-"""Join request handler - auto-approve and send welcome."""
+"""Join request handler - auto-approve (when enabled) and send welcome."""
 
 from telegram import Update
 from telegram.ext import ContextTypes
 
+from bot.config import MAINTENANCE
+from bot.services.config_service import get_config_value
 from bot.services.welcome_service import send_welcome
 from bot.services.log_service import log_join
 from bot.services.user_service import upsert_user
@@ -13,9 +15,21 @@ logger = get_logger(__name__)
 
 
 async def handle_join_request(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Auto-approve join request and send welcome message."""
+    """
+    When auto-accept is ON: approve join request and send welcome.
+    When auto-accept is OFF: do nothing (other bot services remain active).
+    When maintenance mode is ON: do not process join requests.
+    """
     join_req = update.chat_join_request
     if not join_req:
+        return
+
+    if MAINTENANCE:
+        return
+
+    auto_accept = await get_config_value("auto_accept_enabled")
+    if auto_accept.lower() not in ("true", "1", "yes"):
+        logger.info("Join request from %s not approved (auto-accept is off)", join_req.from_user.id)
         return
 
     user = join_req.from_user

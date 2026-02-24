@@ -8,6 +8,7 @@ from bot.services.config_service import get_config_value, set_config_value
 from bot.services.user_service import is_admin, get_user
 from bot.services.state_service import get_user_state, set_user_state, get_admin_state, set_admin_state
 from bot.services.broadcast_service import broadcast_to_users
+from bot.utils.maintenance import check_maintenance
 from bot.utils.exceptions import ValidationError
 from bot.utils.logger import get_logger
 
@@ -18,6 +19,8 @@ USER_HEADER_FORMAT = "👤 User: @{username} ({first_name})\n🆔 ID: {user_id}\
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Route messages: admin config, live chat, admin reply."""
+    if await check_maintenance(update, context):
+        return
     user_id = update.effective_user.id if update.effective_user else 0
     message = update.message
     if not message:

@@ -40,3 +40,6 @@ LOG_FILE: str = str(ROOT_DIR / "logs" / "bot.log")
 # Broadcast
 BROADCAST_DELAY_SECONDS: float = 0.05  # Delay between sends to avoid rate limit
 BROADCAST_RETRY_AFTER_FALLBACK_SECONDS: int = 5  # Default wait if RetryAfter missing
+
+# Maintenance mode - server only (set in .env or environment). When True, non-admin users see maintenance message.
+MAINTENANCE: bool = os.getenv("MAINTENANCE", "false").lower() in ("true", "1", "yes")
