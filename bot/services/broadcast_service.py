@@ -4,8 +4,8 @@ Handles RetryAfter, Forbidden (blocked), NetworkError.
 One user's failure must NOT crash the broadcast loop.
 
 Supports:
-- Ram-style **forward** broadcast (same message forwarded to each user, Telegram forward header).
-- Legacy copy broadcast via send_* + file_id (broadcast_to_users).
+- **copyMessage** broadcast: same content as your draft, no “Forwarded from” header (recommended).
+- Resend via send_* + file_id (broadcast_to_users) for identical behaviour without copyMessage.
 """
 
 import asyncio
@@ -84,18 +84,18 @@ def broadcast_payload_type(message: Any) -> str | None:
     return data["type"] if data else None
 
 
-async def _forward_to_user(
+async def _copy_message_to_user(
     bot: Bot, user_id: int, from_chat_id: int, message_id: int
 ) -> None:
-    """Forward one message to a user. Raises on failure."""
-    await bot.forward_message(
+    """Send a copy of the message (no forward header). Raises on failure."""
+    await bot.copy_message(
         chat_id=user_id,
         from_chat_id=from_chat_id,
         message_id=message_id,
     )
 
 
-async def broadcast_forward_to_users(
+async def broadcast_copy_to_users(
     bot: Bot,
     user_ids: list[int],
     from_chat_id: int,
@@ -106,7 +106,7 @@ async def broadcast_forward_to_users(
     progress_every: int | None = None,
 ) -> BroadcastResult:
     """
-    Forward the same source message to many users (Ram-style).
+    Copy the same source message to many users (Telegram copyMessage — no forward label).
     Same resilience as broadcast_to_users: per-user errors never stop the loop.
     Optional on_progress(done, total, delivered, failed, blocked) for live status.
     """
@@ -118,7 +118,7 @@ async def broadcast_forward_to_users(
 
     for idx, user_id in enumerate(user_ids, start=1):
         try:
-            await _forward_to_user(bot, user_id, from_chat_id, message_id)
+            await _copy_message_to_user(bot, user_id, from_chat_id, message_id)
             delivered += 1
         except RetryAfter as e:
             wait_sec = getattr(e, "retry_after", None)
@@ -129,24 +129,24 @@ async def broadcast_forward_to_users(
             else:
                 wait_sec = BROADCAST_RETRY_AFTER_FALLBACK_SECONDS
             logger.warning(
-                "Broadcast forward RetryAfter for user %s | waiting %s seconds",
+                "Broadcast copy RetryAfter for user %s | waiting %s seconds",
                 user_id,
                 wait_sec,
             )
             await asyncio.sleep(wait_sec)
             try:
-                await _forward_to_user(bot, user_id, from_chat_id, message_id)
+                await _copy_message_to_user(bot, user_id, from_chat_id, message_id)
                 delivered += 1
             except (Forbidden, NetworkError, TelegramError) as retry_err:
                 if isinstance(retry_err, Forbidden):
                     blocked += 1
                     logger.warning(
-                        "Broadcast forward blocked for user %s | %s", user_id, retry_err
+                        "Broadcast copy blocked for user %s | %s", user_id, retry_err
                     )
                 else:
                     failed += 1
                     logger.exception(
-                        "Broadcast forward failed for user %s | %s: %s",
+                        "Broadcast copy failed for user %s | %s: %s",
                         user_id,
                         type(retry_err).__name__,
                         retry_err,
@@ -154,15 +154,15 @@ async def broadcast_forward_to_users(
         except Forbidden:
             blocked += 1
             logger.warning(
-                "Broadcast forward blocked for user %s | user blocked bot", user_id
+                "Broadcast copy blocked for user %s | user blocked bot", user_id
             )
         except NetworkError as e:
             failed += 1
-            logger.exception("Broadcast forward network error for user %s | %s", user_id, e)
+            logger.exception("Broadcast copy network error for user %s | %s", user_id, e)
         except TelegramError as e:
             failed += 1
             logger.exception(
-                "Broadcast forward failed for user %s | %s: %s",
+                "Broadcast copy failed for user %s | %s: %s",
                 user_id,
                 type(e).__name__,
                 e,
@@ -170,7 +170,7 @@ async def broadcast_forward_to_users(
         except Exception as e:
             failed += 1
             logger.exception(
-                "Broadcast forward unexpected error for user %s | %s", user_id, e
+                "Broadcast copy unexpected error for user %s | %s", user_id, e
             )
 
         await asyncio.sleep(BROADCAST_DELAY_SECONDS)
@@ -199,13 +199,13 @@ async def broadcast_forward_to_users(
             delivered,
             failed,
             blocked,
-            f"forward:{message_type}",
+            f"copy:{message_type}",
         )
     except Exception as e:
         logger.exception("Failed to save broadcast result: %s", e)
 
     logger.info(
-        "Broadcast forward complete | total=%s delivered=%s failed=%s blocked=%s",
+        "Broadcast copy complete | total=%s delivered=%s failed=%s blocked=%s",
         total,
         delivered,
         failed,

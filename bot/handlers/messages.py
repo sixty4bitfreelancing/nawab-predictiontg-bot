@@ -115,7 +115,7 @@ async def _handle_admin_response(
         await set_admin_state(user_id, "waiting_broadcast_confirm")
         await message.reply_text(
             f"📢 Ready to broadcast\n\n"
-            f"This message will be forwarded to {len(user_ids)} users "
+            f"This message will be sent to {len(user_ids)} users "
             f"(admins excluded).\n"
             f"Type: {msg_type}\n\n"
             "Tap ✅ Send to start or ❌ Cancel.",

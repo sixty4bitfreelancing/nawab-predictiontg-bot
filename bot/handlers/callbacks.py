@@ -19,7 +19,7 @@ from bot.services.user_service import (
 )
 from bot.services.state_service import get_admin_state, set_admin_state
 from bot.services.log_service import get_recent_logs
-from bot.services.broadcast_service import broadcast_forward_to_users, get_last_broadcast_row
+from bot.services.broadcast_service import broadcast_copy_to_users, get_last_broadcast_row
 from bot.services.welcome_service import send_welcome, _parse_welcome_buttons
 from bot.utils.maintenance import check_maintenance
 from bot.utils.exceptions import WelcomeBuilderError
@@ -76,7 +76,7 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         await set_admin_state(user_id, "waiting_broadcast")
         await query.edit_message_text(
             "📢 Send the message you want to broadcast (text or any media).\n\n"
-            "It will be forwarded to all users (with Telegram’s forward label). "
+            "It will be sent to all users as a normal message (no “Forwarded from” line). "
             "You’ll confirm with ✅ Send before anyone receives it.\n\n"
             "Use /cancel or ❌ Cancel to abort.",
             reply_markup=broadcast_wait_keyboard(),
@@ -295,7 +295,7 @@ async def _confirm_broadcast(query, context: ContextTypes.DEFAULT_TYPE) -> None:
         )
         return
 
-    await query.answer("Broadcast started…")
+    await query.answer("Sending…")
     await set_admin_state(user_id, None)
     from_chat_id = pending["from_chat_id"]
     source_message_id = pending["message_id"]
@@ -314,7 +314,7 @@ async def _confirm_broadcast(query, context: ContextTypes.DEFAULT_TYPE) -> None:
                 chat_id=status_chat_id,
                 message_id=status_message_id,
                 text=(
-                    f"📡 Broadcasting… {done}/{total} ({pct:.1f}%)\n"
+                    f"📡 Sending… {done}/{total} ({pct:.1f}%)\n"
                     f"✅ delivered {d}  ❌ failed {f}  ⚠️ blocked {b}"
                 ),
             )
@@ -323,13 +323,13 @@ async def _confirm_broadcast(query, context: ContextTypes.DEFAULT_TYPE) -> None:
 
     try:
         await query.edit_message_text(
-            f"📡 Broadcasting… 0/{total_n} (0.0%)\n"
+            f"📡 Sending… 0/{total_n} (0.0%)\n"
             f"✅ delivered 0  ❌ failed 0  ⚠️ blocked 0",
         )
     except Exception:
         pass
 
-    result = await broadcast_forward_to_users(
+    result = await broadcast_copy_to_users(
         context.bot,
         user_ids,
         from_chat_id,
