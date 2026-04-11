@@ -2,17 +2,26 @@
 Broadcast service - scalable message broadcasting with structured error handling.
 Handles RetryAfter, Forbidden (blocked), NetworkError.
 One user's failure must NOT crash the broadcast loop.
+
+Supports:
+- Ram-style **forward** broadcast (same message forwarded to each user, Telegram forward header).
+- Legacy copy broadcast via send_* + file_id (broadcast_to_users).
 """
 
 import asyncio
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from typing import Any
 
 from telegram import Bot
 from telegram.error import RetryAfter, Forbidden, NetworkError, TelegramError
 
-from bot.config import BROADCAST_DELAY_SECONDS, BROADCAST_RETRY_AFTER_FALLBACK_SECONDS
-from bot.database import execute_query, fetch_all
+from bot.config import (
+    BROADCAST_DELAY_SECONDS,
+    BROADCAST_RETRY_AFTER_FALLBACK_SECONDS,
+    BROADCAST_PROGRESS_EVERY,
+)
+from bot.database import execute_query, fetch_one
 from bot.utils.exceptions import BroadcastError
 from bot.utils.logger import get_logger
 
@@ -67,6 +76,160 @@ def _extract_message_data(message: Any) -> dict | None:
             "caption": message.caption,
         }
     return None
+
+
+def broadcast_payload_type(message: Any) -> str | None:
+    """Return content type if the message can be broadcast, else None."""
+    data = _extract_message_data(message)
+    return data["type"] if data else None
+
+
+async def _forward_to_user(
+    bot: Bot, user_id: int, from_chat_id: int, message_id: int
+) -> None:
+    """Forward one message to a user. Raises on failure."""
+    await bot.forward_message(
+        chat_id=user_id,
+        from_chat_id=from_chat_id,
+        message_id=message_id,
+    )
+
+
+async def broadcast_forward_to_users(
+    bot: Bot,
+    user_ids: list[int],
+    from_chat_id: int,
+    message_id: int,
+    message_type: str,
+    *,
+    on_progress: Callable[[int, int, int, int, int], Awaitable[None]] | None = None,
+    progress_every: int | None = None,
+) -> BroadcastResult:
+    """
+    Forward the same source message to many users (Ram-style).
+    Same resilience as broadcast_to_users: per-user errors never stop the loop.
+    Optional on_progress(done, total, delivered, failed, blocked) for live status.
+    """
+    delivered = 0
+    failed = 0
+    blocked = 0
+    total = len(user_ids)
+    pe = BROADCAST_PROGRESS_EVERY if progress_every is None else progress_every
+
+    for idx, user_id in enumerate(user_ids, start=1):
+        try:
+            await _forward_to_user(bot, user_id, from_chat_id, message_id)
+            delivered += 1
+        except RetryAfter as e:
+            wait_sec = getattr(e, "retry_after", None)
+            if wait_sec is None:
+                wait_sec = BROADCAST_RETRY_AFTER_FALLBACK_SECONDS
+            if isinstance(wait_sec, (int, float)):
+                wait_sec = int(wait_sec)
+            else:
+                wait_sec = BROADCAST_RETRY_AFTER_FALLBACK_SECONDS
+            logger.warning(
+                "Broadcast forward RetryAfter for user %s | waiting %s seconds",
+                user_id,
+                wait_sec,
+            )
+            await asyncio.sleep(wait_sec)
+            try:
+                await _forward_to_user(bot, user_id, from_chat_id, message_id)
+                delivered += 1
+            except (Forbidden, NetworkError, TelegramError) as retry_err:
+                if isinstance(retry_err, Forbidden):
+                    blocked += 1
+                    logger.warning(
+                        "Broadcast forward blocked for user %s | %s", user_id, retry_err
+                    )
+                else:
+                    failed += 1
+                    logger.exception(
+                        "Broadcast forward failed for user %s | %s: %s",
+                        user_id,
+                        type(retry_err).__name__,
+                        retry_err,
+                    )
+        except Forbidden:
+            blocked += 1
+            logger.warning(
+                "Broadcast forward blocked for user %s | user blocked bot", user_id
+            )
+        except NetworkError as e:
+            failed += 1
+            logger.exception("Broadcast forward network error for user %s | %s", user_id, e)
+        except TelegramError as e:
+            failed += 1
+            logger.exception(
+                "Broadcast forward failed for user %s | %s: %s",
+                user_id,
+                type(e).__name__,
+                e,
+            )
+        except Exception as e:
+            failed += 1
+            logger.exception(
+                "Broadcast forward unexpected error for user %s | %s", user_id, e
+            )
+
+        await asyncio.sleep(BROADCAST_DELAY_SECONDS)
+
+        if on_progress and pe > 0 and (idx % pe == 0 or idx == total):
+            try:
+                await on_progress(idx, total, delivered, failed, blocked)
+            except Exception:
+                logger.debug("broadcast progress callback failed", exc_info=True)
+
+    result = BroadcastResult(
+        total=total,
+        delivered=delivered,
+        failed=failed,
+        blocked=blocked,
+        message_type=message_type,
+    )
+
+    try:
+        await execute_query(
+            """
+            INSERT INTO broadcast_results (total_users, delivered, failed, blocked, message_type)
+            VALUES ($1, $2, $3, $4, $5)
+            """,
+            total,
+            delivered,
+            failed,
+            blocked,
+            f"forward:{message_type}",
+        )
+    except Exception as e:
+        logger.exception("Failed to save broadcast result: %s", e)
+
+    logger.info(
+        "Broadcast forward complete | total=%s delivered=%s failed=%s blocked=%s",
+        total,
+        delivered,
+        failed,
+        blocked,
+    )
+
+    return result
+
+
+async def get_last_broadcast_row() -> dict | None:
+    """Latest row from broadcast_results (for Broadcast Status)."""
+    try:
+        row = await fetch_one(
+            """
+            SELECT broadcast_at, total_users, delivered, failed, blocked, message_type
+            FROM broadcast_results
+            ORDER BY id DESC
+            LIMIT 1
+            """
+        )
+        return dict(row) if row else None
+    except Exception as e:
+        logger.exception("Failed to read last broadcast: %s", e)
+        return None
 
 
 async def _send_to_user(bot: Bot, user_id: int, data: dict) -> None:

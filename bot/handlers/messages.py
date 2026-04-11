@@ -6,11 +6,11 @@ from telegram.ext import ContextTypes
 
 from bot.services.config_service import get_config_value, set_config_value
 from bot.services.state_service import get_admin_state, set_admin_state
-from bot.services.user_service import is_admin
-from bot.services.broadcast_service import broadcast_to_users
+from bot.services.user_service import is_admin, get_all_user_ids, get_all_admin_ids
+from bot.services.broadcast_service import broadcast_payload_type
+from bot.keyboards.admin import confirm_broadcast_keyboard
 from bot.services.welcome_service import send_welcome, _parse_welcome_buttons
 from bot.utils.maintenance import check_maintenance
-from bot.utils.exceptions import ValidationError
 from bot.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -94,30 +94,40 @@ async def _handle_admin_response(
             return
 
     elif state == "waiting_broadcast":
-        await _run_broadcast(update, context)
-        await set_admin_state(user_id, None)
+        msg_type = broadcast_payload_type(message)
+        if not msg_type:
+            await message.reply_text(
+                "❌ Unsupported message type. Send text, photo, video, document, "
+                "voice, audio, sticker, animation, or video note."
+            )
+            return
+        admin_ids = await get_all_admin_ids()
+        user_ids = await get_all_user_ids(exclude_admin_ids=admin_ids)
+        if not user_ids:
+            await message.reply_text("❌ No users to broadcast to.")
+            await set_admin_state(user_id, None)
+            return
+        context.user_data["broadcast_pending"] = {
+            "from_chat_id": message.chat_id,
+            "message_id": message.message_id,
+            "message_type": msg_type,
+        }
+        await set_admin_state(user_id, "waiting_broadcast_confirm")
+        await message.reply_text(
+            f"📢 Ready to broadcast\n\n"
+            f"This message will be forwarded to {len(user_ids)} users "
+            f"(admins excluded).\n"
+            f"Type: {msg_type}\n\n"
+            "Tap ✅ Send to start or ❌ Cancel.",
+            reply_markup=confirm_broadcast_keyboard(),
+        )
+        return
+
+    elif state == "waiting_broadcast_confirm":
+        await message.reply_text(
+            "⚠️ A broadcast is waiting for confirmation. "
+            "Use ✅ Send or ❌ Cancel on the message above."
+        )
         return
 
     await set_admin_state(user_id, None)
-
-
-async def _run_broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Run broadcast to all users."""
-    message = update.message
-    from bot.services.user_service import get_all_user_ids, get_all_admin_ids
-    admin_ids = await get_all_admin_ids()
-    user_ids = await get_all_user_ids(exclude_admin_ids=admin_ids)
-
-    if not user_ids:
-        await message.reply_text("❌ No users to broadcast to.")
-        return
-
-    await message.reply_text(f"📡 Broadcasting to {len(user_ids)} users...")
-    result = await broadcast_to_users(context.bot, user_ids, message)
-    await message.reply_text(
-        f"📡 **Broadcast Complete**\n\n"
-        f"✅ Delivered: {result.delivered}\n"
-        f"❌ Failed: {result.failed}\n"
-        f"⚠️ Couldn't deliver: {result.blocked} (user blocked bot or never started chat)\n"
-        f"📊 Total: {result.total}"
-    )

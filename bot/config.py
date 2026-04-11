@@ -61,6 +61,8 @@ def _int_env(name: str, default: int) -> int:
 # 0.04 s = 25 messages per second (under Telegram’s ~30 msg/s limit)
 BROADCAST_DELAY_SECONDS: float = _float_env("BROADCAST_DELAY_SECONDS", 0.04)
 BROADCAST_RETRY_AFTER_FALLBACK_SECONDS: int = _int_env("BROADCAST_RETRY_AFTER_FALLBACK_SECONDS", 5)
+# Edit status message every N users during forward broadcast (0 = only start/end)
+BROADCAST_PROGRESS_EVERY: int = _int_env("BROADCAST_PROGRESS_EVERY", 400)
 
 # Maintenance mode - server only (set in .env or environment). When True, non-admin users see maintenance message.
 MAINTENANCE: bool = os.getenv("MAINTENANCE", "false").lower() in ("true", "1", "yes")

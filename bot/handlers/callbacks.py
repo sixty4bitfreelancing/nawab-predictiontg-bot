@@ -4,12 +4,22 @@ import json
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes
 
-from bot.keyboards.admin import admin_panel_keyboard, back_to_admin_keyboard
+from bot.keyboards.admin import (
+    admin_panel_keyboard,
+    back_to_admin_keyboard,
+    broadcast_wait_keyboard,
+)
 from bot.services.config_service import get_config_value, get_all_config, set_config_value
-from bot.services.user_service import is_admin, get_user_count, get_recent_users
+from bot.services.user_service import (
+    is_admin,
+    get_user_count,
+    get_recent_users,
+    get_all_user_ids,
+    get_all_admin_ids,
+)
 from bot.services.state_service import get_admin_state, set_admin_state
 from bot.services.log_service import get_recent_logs
-from bot.services.broadcast_service import broadcast_to_users, BroadcastResult
+from bot.services.broadcast_service import broadcast_forward_to_users, get_last_broadcast_row
 from bot.services.welcome_service import send_welcome, _parse_welcome_buttons
 from bot.utils.maintenance import check_maintenance
 from bot.utils.exceptions import WelcomeBuilderError
@@ -62,11 +72,21 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     elif data == "toggle_auto_accept":
         await _toggle_auto_accept(query)
     elif data == "send_broadcast":
+        context.user_data.pop("broadcast_pending", None)
         await set_admin_state(user_id, "waiting_broadcast")
         await query.edit_message_text(
-            "📡 **Send Message to All Users**\n\n"
-            "Send the message (text, photo, video, etc.) to broadcast."
+            "📢 Send the message you want to broadcast (text or any media).\n\n"
+            "It will be forwarded to all users (with Telegram’s forward label). "
+            "You’ll confirm with ✅ Send before anyone receives it.\n\n"
+            "Use /cancel or ❌ Cancel to abort.",
+            reply_markup=broadcast_wait_keyboard(),
         )
+    elif data == "broadcast:status":
+        await _show_broadcast_status(query)
+    elif data == "broadcast:confirm":
+        await _confirm_broadcast(query, context)
+    elif data == "broadcast:cancel":
+        await _cancel_broadcast(query, context, user_id)
     elif data == "view_users":
         await _show_user_stats(query)
     elif data == "view_logs":
@@ -77,6 +97,7 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
             reply_markup=back_to_admin_keyboard(),
         )
     elif data == "back_to_admin":
+        context.user_data.pop("broadcast_pending", None)
         await set_admin_state(user_id, None)
         await show_admin_panel_from_query(query, context)
 
@@ -214,3 +235,125 @@ async def _show_logs(query) -> None:
     if len(text) > 4000:
         text = text[:4000] + "\n\n... (truncated)"
     await query.edit_message_text(text, reply_markup=back_to_admin_keyboard())
+
+
+async def _show_broadcast_status(query) -> None:
+    row = await get_last_broadcast_row()
+    if not row:
+        await query.edit_message_text(
+            "📡 **Broadcast Status**\n\nNo broadcast has been recorded yet.",
+            reply_markup=back_to_admin_keyboard(),
+            parse_mode="Markdown",
+        )
+        return
+    at = row["broadcast_at"]
+    at_s = at.isoformat() if hasattr(at, "isoformat") else str(at)
+    await query.edit_message_text(
+        f"📡 **Last broadcast**\n\n"
+        f"**When:** {at_s}\n"
+        f"**Total recipients:** {row['total_users']}\n"
+        f"✅ Delivered: {row['delivered']}\n"
+        f"❌ Failed: {row['failed']}\n"
+        f"⚠️ Blocked / unreachable: {row['blocked']}\n"
+        f"**Kind:** `{row['message_type']}`",
+        reply_markup=back_to_admin_keyboard(),
+        parse_mode="Markdown",
+    )
+
+
+async def _cancel_broadcast(
+    query,
+    context: ContextTypes.DEFAULT_TYPE,
+    user_id: int,
+) -> None:
+    context.user_data.pop("broadcast_pending", None)
+    await set_admin_state(user_id, None)
+    await query.edit_message_text(
+        "✅ Cancelled. You’re back in the admin panel.",
+        reply_markup=admin_panel_keyboard(),
+    )
+
+
+async def _confirm_broadcast(query, context: ContextTypes.DEFAULT_TYPE) -> None:
+    user_id = query.from_user.id if query.from_user else 0
+    pending = context.user_data.get("broadcast_pending")
+    if not pending:
+        await query.answer(
+            "Nothing to send. Open Admin → Send Message to All Users again.",
+            show_alert=True,
+        )
+        return
+
+    admin_ids = await get_all_admin_ids()
+    user_ids = await get_all_user_ids(exclude_admin_ids=admin_ids)
+    if not user_ids:
+        context.user_data.pop("broadcast_pending", None)
+        await set_admin_state(user_id, None)
+        await query.edit_message_text(
+            "❌ No users to broadcast to.",
+            reply_markup=admin_panel_keyboard(),
+        )
+        return
+
+    await query.answer("Broadcast started…")
+    await set_admin_state(user_id, None)
+    from_chat_id = pending["from_chat_id"]
+    source_message_id = pending["message_id"]
+    msg_type = pending["message_type"]
+
+    status_chat_id = query.message.chat_id
+    status_message_id = query.message.message_id
+    total_n = len(user_ids)
+
+    async def on_progress(
+        done: int, total: int, d: int, f: int, b: int
+    ) -> None:
+        try:
+            pct = 100.0 * done / total if total else 0.0
+            await context.bot.edit_message_text(
+                chat_id=status_chat_id,
+                message_id=status_message_id,
+                text=(
+                    f"📡 Broadcasting… {done}/{total} ({pct:.1f}%)\n"
+                    f"✅ delivered {d}  ❌ failed {f}  ⚠️ blocked {b}"
+                ),
+            )
+        except Exception:
+            pass
+
+    try:
+        await query.edit_message_text(
+            f"📡 Broadcasting… 0/{total_n} (0.0%)\n"
+            f"✅ delivered 0  ❌ failed 0  ⚠️ blocked 0",
+        )
+    except Exception:
+        pass
+
+    result = await broadcast_forward_to_users(
+        context.bot,
+        user_ids,
+        from_chat_id,
+        source_message_id,
+        msg_type,
+        on_progress=on_progress,
+    )
+    context.user_data.pop("broadcast_pending", None)
+
+    summary = (
+        f"📡 Broadcast complete\n\n"
+        f"✅ Delivered: {result.delivered}\n"
+        f"❌ Failed: {result.failed}\n"
+        f"⚠️ Couldn't deliver: {result.blocked}\n"
+        f"📊 Total: {result.total}"
+    )
+    try:
+        await query.edit_message_text(
+            summary,
+            reply_markup=admin_panel_keyboard(),
+        )
+    except Exception:
+        await context.bot.send_message(
+            chat_id=status_chat_id,
+            text=summary,
+            reply_markup=admin_panel_keyboard(),
+        )

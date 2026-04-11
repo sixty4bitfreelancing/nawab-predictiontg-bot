@@ -22,7 +22,7 @@ from bot.utils.error_handler import global_error_handler
 from bot.utils.logger import get_logger
 
 from bot.handlers.start import start_command
-from bot.handlers.admin import admin_command, show_chat_id_command
+from bot.handlers.admin import admin_command, show_chat_id_command, cancel_command
 from bot.handlers.callbacks import handle_callback
 from bot.handlers.messages import handle_message
 from bot.handlers.join import handle_join_request
@@ -62,6 +62,7 @@ def build_application() -> Application:
     # Command handlers
     application.add_handler(CommandHandler("start", start_command))
     application.add_handler(CommandHandler("admin", admin_command))
+    application.add_handler(CommandHandler("cancel", cancel_command))
     application.add_handler(CommandHandler("id", show_chat_id_command))
 
     # Callback handler

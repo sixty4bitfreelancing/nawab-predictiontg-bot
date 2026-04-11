@@ -6,6 +6,7 @@ from telegram.ext import ContextTypes
 from bot.handlers.callbacks import show_admin_panel_from_query
 from bot.keyboards.admin import admin_panel_keyboard
 from bot.services.user_service import is_admin
+from bot.services.state_service import set_admin_state
 from bot.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -60,4 +61,19 @@ async def show_chat_id_command(update: Update, context: ContextTypes.DEFAULT_TYP
         f"**Type:** {chat_type}\n**Title:** {chat.title}\n**ID:** `{chat.id}`\n"
         f"{username_info}",
         parse_mode="Markdown",
+    )
+
+
+async def cancel_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Abort admin wizard steps (broadcast draft, welcome fields, etc.)."""
+    user = update.effective_user
+    if not user or not update.message:
+        return
+    if not await is_admin(user.id):
+        return
+    await set_admin_state(user.id, None)
+    context.user_data.pop("broadcast_pending", None)
+    await update.message.reply_text(
+        "✅ Cancelled. Any pending broadcast draft was cleared.",
+        reply_markup=admin_panel_keyboard(),
     )
